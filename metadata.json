@@ -1,0 +1,5 @@
+{
+  "name": "Multi-Language Code Converter",
+  "description": "An intelligent tool to convert large, multi-file codebases from one programming language to another using Gemini, preserving project architecture, comments, and naming semantics.",
+  "requestFramePermissions": []
+}
