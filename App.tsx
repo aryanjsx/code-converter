@@ -8,8 +8,10 @@ import CodeDisplay from './components/CodeDisplay';
 import Loader from './components/Loader';
 import ToastContainer from './components/ToastContainer';
 import { useToast } from './context/ToastContext';
-import { SUPPORTED_LANGUAGES } from './constants';
-import { convertCodebase, resolveProviderFromEnv } from './services/llmService';
+import { SUPPORTED_LANGUAGES, PROVIDER_PRESETS } from './constants';
+import { convertCodebase } from './services/llmService';
+import { useProvider } from './context/ProviderContext';
+import ProviderPicker from './components/ProviderPicker';
 import type { FileNode, ConvertedFile } from './types';
 
 const getOriginalFilePath = (file: File): string => {
@@ -59,9 +61,7 @@ const App: React.FC = () => {
   const [convertedFileTree, setConvertedFileTree] = useState<FileNode | null>(null);
 
   const { addToast } = useToast();
-
-  const providerConfig = useMemo(() => resolveProviderFromEnv(), []);
-  const isProviderConfigured = !!providerConfig;
+  const { providerConfig, isConfigValid } = useProvider();
 
   const handleFilesChange = (newFiles: File[]) => {
     if (originalFiles.length > 0 && newFiles.length > 0) {
@@ -121,8 +121,8 @@ const App: React.FC = () => {
 
 
   const handleConvert = async () => {
-    if (!isProviderConfigured || !providerConfig) {
-      setError("LLM provider is not configured. Please set the required environment variables.");
+    if (!isConfigValid) {
+      setError("Please configure your AI provider — API key, model, and base URL are required.");
       return;
     }
     if (originalFiles.length === 0) {
@@ -134,7 +134,14 @@ const App: React.FC = () => {
     try {
       const sourceLanguage = SUPPORTED_LANGUAGES.find(l => l.id === sourceLangId)!;
       const targetLanguage = SUPPORTED_LANGUAGES.find(l => l.id === targetLangId)!;
-      const result = await convertCodebase(originalFiles, sourceLanguage, targetLanguage, providerConfig);
+      const preset = PROVIDER_PRESETS.find(p => p.id === providerConfig.provider);
+      const result = await convertCodebase(originalFiles, sourceLanguage, targetLanguage, {
+        id: providerConfig.provider,
+        name: preset?.name ?? providerConfig.provider,
+        baseUrl: providerConfig.baseURL,
+        apiKey: providerConfig.apiKey,
+        model: providerConfig.model,
+      });
       setConvertedFiles(result);
       setConvertedFileTree(buildFileTree(result));
       setStatus('success');
@@ -255,11 +262,11 @@ const App: React.FC = () => {
     return buildFileTree(originalFiles);
   }, [originalFiles]);
 
-  const isConvertButtonDisabled = !isProviderConfigured || originalFiles.length === 0 || status === 'processing';
+  const isConvertButtonDisabled = !isConfigValid || originalFiles.length === 0 || status === 'processing';
 
   const getConvertButtonTooltip = () => {
-    if (!isProviderConfigured) {
-      return 'LLM provider is not configured. Set the required environment variables.';
+    if (!isConfigValid) {
+      return 'Configure your AI provider — API key, model, and base URL are required.';
     }
     if (originalFiles.length === 0) {
       return 'Please upload a project folder or files before converting.';
@@ -268,6 +275,15 @@ const App: React.FC = () => {
       return 'Conversion in progress...';
     }
     return 'Convert the uploaded code';
+  };
+
+  const getMissingConfigMessage = (): string | null => {
+    const missing: string[] = [];
+    if (!providerConfig.apiKey.trim()) missing.push('API key');
+    if (!providerConfig.baseURL.trim()) missing.push('base URL');
+    if (!providerConfig.model.trim()) missing.push('model');
+    if (missing.length === 0) return null;
+    return `Enter ${missing.join(', ')} in the AI Provider section to enable conversion.`;
   };
 
   const UploadArea = () => (
@@ -378,10 +394,12 @@ const App: React.FC = () => {
             </div>
           </div>
 
-          {!isProviderConfigured && (
+          <ProviderPicker />
+
+          {getMissingConfigMessage() && (
             <div className="bg-amber-500/10 border border-amber-500/20 text-amber-200 px-4 py-3 rounded-xl flex items-center gap-3 animate-fade-in">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-              <span>Warning: LLM provider is not configured. Set LLM_API_KEY (or GEMINI_API_KEY) in your environment.</span>
+              <span>{getMissingConfigMessage()}</span>
             </div>
           )}
 

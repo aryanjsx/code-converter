@@ -1,5 +1,4 @@
 import type { Language, ConvertedFile, LLMProviderConfig } from '../types';
-import { PROVIDER_PRESETS } from '../constants';
 
 const formatFileContent = async (files: File[]): Promise<string> => {
   const fileContents = await Promise.all(
@@ -69,26 +68,6 @@ function extractJSON(text: string): string {
     }
   }
   return trimmed.trim();
-}
-
-/**
- * Build an LLMProviderConfig from environment variables injected at build time.
- * Falls back to Gemini defaults when only GEMINI_API_KEY is present (backward compat).
- */
-export function resolveProviderFromEnv(): LLMProviderConfig | null {
-  const apiKey = process.env.LLM_API_KEY || process.env.API_KEY || '';
-  if (!apiKey) return null;
-
-  const providerId = process.env.LLM_PROVIDER || 'gemini';
-  const preset = PROVIDER_PRESETS.find(p => p.id === providerId);
-
-  return {
-    id: preset?.id ?? 'custom',
-    name: preset?.name ?? 'Custom',
-    baseUrl: process.env.LLM_BASE_URL || preset?.baseUrl || '',
-    apiKey,
-    model: process.env.LLM_MODEL || preset?.defaultModel || '',
-  };
 }
 
 /**
