@@ -1,167 +1,155 @@
 <div align="center">
 
-  <h1>🧬 Multi‑Language Code Converter</h1>
+<img src="assets/banner.png" alt="AI Code Converter Banner" width="800" />
 
-  <p>
-    Convert entire codebases between programming languages using Google's Gemini models.<br />
-    Upload a project, pick source and target languages, review side‑by‑side diffs, and download a ready‑to‑run ZIP.
-  </p>
+# Multi-Language Code Converter
 
-  <p>
-    <strong>Tech Stack:</strong> React · Vite · TypeScript · @google/genai · JSZip · FileSaver
-  </p>
+**Convert entire codebases between 23+ programming languages using Google Gemini.**
+
+Upload a project, pick your source and target languages, review the results side-by-side, and download a ready-to-run ZIP.
+
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)](https://react.dev)
+[![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)](https://vite.dev)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![Gemini](https://img.shields.io/badge/Gemini_2.5_Pro-4285F4?logo=google&logoColor=white)](https://ai.google.dev)
 
 </div>
 
 ---
 
-### ✨ Overview
+## What It Does
 
-**Multi‑Language Code Converter** is a browser‑based tool that helps you migrate projects between languages using AI.  
-It sends your uploaded codebase to Gemini, asks for an idiomatic conversion (preserving structure and behavior), and then lets you:
+Multi-Language Code Converter is a browser-based tool that sends your uploaded codebase to **Gemini 2.5 Pro**, requests an idiomatic conversion to the target language, and presents the results in an interactive UI:
 
-- **Browse the original and converted projects** via a tree view
-- **Compare files side‑by‑side** with syntax‑highlighted code
-- **Download the converted project as a ZIP**
+- Browse original and converted project trees side-by-side
+- View syntax-highlighted source alongside its converted counterpart
+- Download the entire converted project as a ZIP with one click
 
-The default selection is **Python → Rust**, but many other languages are supported.
-
----
-
-### 🚀 Features
-
-- **Full‑project conversion**
-  - Upload an entire folder or a set of files; the app builds a virtual file tree and sends all context to Gemini.
-- **Architecture & naming preserved**
-  - Keeps directory structure and file names (only extensions change when appropriate).
-- **Side‑by‑side code viewer**
-  - Quickly jump between original and converted counterparts with automatic file matching.
-- **One‑click ZIP export**
-  - Download the converted project as `converted-project.zip`.
-- **Modern UI**
-  - Glassmorphism‑inspired dark theme with smooth transitions and responsive layout.
+The default pairing is **Python -> Rust**, but any combination of the supported languages works.
 
 ---
 
-### 🧠 Supported Languages
+## Supported Languages
 
-The UI currently exposes a rich set of language options (as defined in `constants.ts`), including but not limited to:
+| | | | |
+|---|---|---|---|
+| Python | JavaScript | TypeScript | Java |
+| Go | Rust | C | C++ |
+| C# | Ruby | PHP | Swift |
+| Kotlin | Scala | Dart | R |
+| Perl | Shell Script | Julia | MATLAB |
+| Fortran | COBOL | Lisp | |
 
-- **Python**, **JavaScript**, **TypeScript**, **Java**
-- **Go**, **Rust**
-- **C**, **C++**, **C#**
-- **Ruby**, **PHP**
-- **Swift**, **Kotlin**, **Scala**, **Dart**
-- **R**, **Perl**, **Shell**, **Julia**, **MATLAB**, **Fortran**, **COBOL**, **Lisp**
-
-Gemini is instructed to:
-
-- Preserve business logic and behavior
-- Use idiomatic APIs and best practices for the **target** language
-- Keep comments and documentation
+Gemini is instructed to preserve business logic, use idiomatic APIs for the target language, and retain all comments and documentation.
 
 ---
 
-### 🔧 Prerequisites
+## Prerequisites
 
-- **Node.js** (recommended: ≥ 18)
-- A **Google Gemini API key**
-
-You can obtain an API key from the Google AI Studio.
+- **Node.js** >= 18
+- A **Google Gemini API key** (obtain one from [Google AI Studio](https://aistudio.google.com))
 
 ---
 
-### ⚙️ Environment Configuration
+## Getting Started
 
-The app reads the Gemini key from the **`API_KEY`** environment variable in the frontend build.
+**1. Clone the repo**
 
-In local development, one common setup is:
+```bash
+git clone https://github.com/<your-username>/code-converter.git
+cd code-converter
+```
 
-1. Create an `.env` file in the project root:
+**2. Install dependencies**
 
-   ```bash
-   API_KEY=your_gemini_api_key_here
-   ```
+```bash
+npm install
+```
 
-2. Ensure your dev environment / bundler exposes `API_KEY` to the client (the app accesses it via `process.env.API_KEY`).
+**3. Set your API key**
 
-> **Note:** Never commit your real API key to version control.
+Create a `.env` file in the project root:
 
----
+```
+API_KEY=your_gemini_api_key_here
+```
 
-### 🏃‍♀️ Run Locally
+> Never commit your real API key to version control.
 
-From the project root:
+**4. Start the dev server**
 
-1. **Install dependencies**
+```bash
+npm run dev
+```
 
-   ```bash
-   npm install
-   ```
-
-2. **Configure your Gemini API key**
-
-   Make sure `API_KEY` is set and available to the frontend (see the section above).
-
-3. **Start the dev server**
-
-   ```bash
-   npm run dev
-   ```
-
-4. Open the printed local URL in your browser (typically `http://localhost:5173`).
+Open the printed local URL (typically `http://localhost:5173`) in your browser.
 
 ---
 
-### 🧭 How to Use
+## Usage
 
-1. **Upload your project**
-   - Click **“Select Project Folder”** to upload a full codebase, or
-   - Click **“Select Files”** to upload a set of individual files.
-2. **Choose languages**
-   - Pick the **Source Language** that matches your existing code.
-   - Pick the **Target Language** you want to convert to.
-3. **Convert**
-   - Click **“Convert Code”**.
-   - You’ll see a loader while Gemini converts your project.
-4. **Explore & compare**
-   - Browse **Original Project** and **Converted Project** in the side file trees.
-   - Click a file in either tree to view side‑by‑side code.
-5. **Download**
-   - When conversion succeeds, click **“Download ZIP”** to save the converted project.
+1. **Upload** -- Click *Select Project Folder* to upload a full directory, or *Select Files* for individual files.
+2. **Choose languages** -- Pick the source language that matches your code and the target language you want.
+3. **Convert** -- Hit *Convert Code* and wait while Gemini processes the project.
+4. **Explore** -- Browse the original and converted file trees, click any file to see its code side-by-side.
+5. **Download** -- Click *Download ZIP* to save the converted project as `converted-project.zip`.
 
 ---
 
-### 🧩 Project Structure (High Level)
+## Project Structure
 
-- `App.tsx` – Main UI and conversion flow, file trees, side‑by‑side display
-- `components/` – Header, language pickers, file tree, code display, toasts, loader, dialogs
-- `services/geminiService.ts` – Gemini client integration and conversion prompt orchestration
-- `constants.ts` – List of supported languages and metadata
-- `types.ts` – Shared TypeScript types (languages, file tree, converted files)
+```
+.
+├── App.tsx                      # Main UI, conversion flow, side-by-side display
+├── index.tsx                    # React entry point
+├── constants.ts                 # Supported languages and metadata
+├── types.ts                     # Shared TypeScript types
+├── services/
+│   └── geminiService.ts         # Gemini client, prompt construction, response parsing
+├── components/
+│   ├── Header.tsx               # App header
+│   ├── LanguageSelector.tsx     # Source / target language pickers
+│   ├── FileTree.tsx             # Collapsible file tree view
+│   ├── CodeDisplay.tsx          # Syntax-highlighted code viewer
+│   ├── Loader.tsx               # Conversion progress indicator
+│   ├── ConfirmationDialog.tsx   # Confirmation modal
+│   ├── Toast.tsx                # Individual toast notification
+│   └── ToastContainer.tsx       # Toast stack container
+├── context/
+│   └── ToastContext.tsx         # Toast notification context provider
+├── assets/
+│   └── banner.png               # Project banner image
+└── vite.config.ts               # Vite configuration
+```
 
 ---
 
-### 🔒 Security & Privacy Notes
+## Tech Stack
 
-- Uploaded files are processed in the browser and sent only to the Gemini API endpoint.
-- Avoid uploading code that contains **secrets**, **API keys**, or other sensitive credentials.
-- Always **review converted output** before using it in production.
-
----
-
-### 🙌 Contributions & Feedback
-
-If you’d like to extend or customize this app (e.g., add presets, better diffing, or framework‑aware rules), you can:
-
-- Fork the repository
-- Open issues or pull requests with improvements
-
-Suggestions and enhancements are very welcome.
+| Layer | Technology |
+|---|---|
+| Framework | React 19 |
+| Bundler | Vite 6 |
+| Language | TypeScript 5.8 |
+| AI Model | Google Gemini 2.5 Pro (`@google/genai`) |
+| ZIP Export | JSZip + FileSaver |
 
 ---
 
-### 📄 License
+## Security and Privacy
 
-This project is provided as‑is; choose and add a license file (e.g., MIT) if you plan to open‑source it publicly.
+- Files are processed in the browser and sent only to the Gemini API endpoint.
+- Do not upload code containing secrets, API keys, or other sensitive credentials.
+- Always review converted output before using it in production.
 
+---
+
+## Contributing
+
+Contributions are welcome. Fork the repository and open a pull request with your improvements, whether that is new language presets, better diffing, framework-aware conversion rules, or anything else.
+
+---
+
+## License
+
+This project is provided as-is. Add a license file (e.g. MIT) if you plan to distribute it publicly.

@@ -9,7 +9,7 @@ import Loader from './components/Loader';
 import ToastContainer from './components/ToastContainer';
 import { useToast } from './context/ToastContext';
 import { SUPPORTED_LANGUAGES } from './constants';
-import { convertCodebase } from './services/geminiService';
+import { convertCodebase, resolveProviderFromEnv } from './services/llmService';
 import type { FileNode, ConvertedFile } from './types';
 
 const getOriginalFilePath = (file: File): string => {
@@ -60,7 +60,8 @@ const App: React.FC = () => {
 
   const { addToast } = useToast();
 
-  const isApiKeyAvailable = useMemo(() => !!process.env.API_KEY, []);
+  const providerConfig = useMemo(() => resolveProviderFromEnv(), []);
+  const isProviderConfigured = !!providerConfig;
 
   const handleFilesChange = (newFiles: File[]) => {
     if (originalFiles.length > 0 && newFiles.length > 0) {
@@ -120,8 +121,8 @@ const App: React.FC = () => {
 
 
   const handleConvert = async () => {
-    if (!isApiKeyAvailable) {
-      setError("API Key is not configured. Please set the API_KEY environment variable to proceed.");
+    if (!isProviderConfigured || !providerConfig) {
+      setError("LLM provider is not configured. Please set the required environment variables.");
       return;
     }
     if (originalFiles.length === 0) {
@@ -133,7 +134,7 @@ const App: React.FC = () => {
     try {
       const sourceLanguage = SUPPORTED_LANGUAGES.find(l => l.id === sourceLangId)!;
       const targetLanguage = SUPPORTED_LANGUAGES.find(l => l.id === targetLangId)!;
-      const result = await convertCodebase(originalFiles, sourceLanguage, targetLanguage);
+      const result = await convertCodebase(originalFiles, sourceLanguage, targetLanguage, providerConfig);
       setConvertedFiles(result);
       setConvertedFileTree(buildFileTree(result));
       setStatus('success');
@@ -254,11 +255,11 @@ const App: React.FC = () => {
     return buildFileTree(originalFiles);
   }, [originalFiles]);
 
-  const isConvertButtonDisabled = !isApiKeyAvailable || originalFiles.length === 0 || status === 'processing';
+  const isConvertButtonDisabled = !isProviderConfigured || originalFiles.length === 0 || status === 'processing';
 
   const getConvertButtonTooltip = () => {
-    if (!isApiKeyAvailable) {
-      return 'API Key is not configured. Please set the API_KEY environment variable.';
+    if (!isProviderConfigured) {
+      return 'LLM provider is not configured. Set the required environment variables.';
     }
     if (originalFiles.length === 0) {
       return 'Please upload a project folder or files before converting.';
@@ -377,10 +378,10 @@ const App: React.FC = () => {
             </div>
           </div>
 
-          {!isApiKeyAvailable && (
+          {!isProviderConfigured && (
             <div className="bg-amber-500/10 border border-amber-500/20 text-amber-200 px-4 py-3 rounded-xl flex items-center gap-3 animate-fade-in">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-              <span>Warning: API Key is not configured. Code conversion is disabled.</span>
+              <span>Warning: LLM provider is not configured. Set LLM_API_KEY (or GEMINI_API_KEY) in your environment.</span>
             </div>
           )}
 
