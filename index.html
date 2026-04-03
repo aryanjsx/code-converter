@@ -4,14 +4,23 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      CSP notes:
+      - 'unsafe-inline' in script-src is required for the inline Tailwind config block.
+        Moving it to an external file is not supported by the Tailwind CDN play mode.
+      - connect-src allows https: (any origin) because the app must reach arbitrary
+        AI provider APIs configured by the user at runtime. This is by design.
+      - http://localhost:11434 and http://127.0.0.1:11434 are allowed for local
+        Ollama instances only.
+    -->
     <meta http-equiv="Content-Security-Policy"
       content="default-src 'self';
-        script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://aistudiocdn.com;
+        script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com;
         style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
         font-src https://fonts.gstatic.com;
         connect-src https: http://localhost:11434 http://127.0.0.1:11434;
         img-src 'self' data:;" />
-    <title>Multi-Language Code Converter</title>
+    <title>CodexConvert</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -92,17 +101,6 @@
         border: 1px solid rgba(255, 255, 255, 0.05);
       }
     </style>
-  <script type="importmap">
-{
-  "imports": {
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "react": "https://aistudiocdn.com/react@^19.2.0",
-    "jszip": "https://aistudiocdn.com/jszip@^3.10.1",
-    "file-saver": "https://aistudiocdn.com/file-saver@^2.0.5"
-  }
-}
-</script>
 </head>
   <body class="bg-gray-950 text-gray-200 font-sans antialiased selection:bg-indigo-500 selection:text-white overflow-hidden">
     <div id="root"></div>

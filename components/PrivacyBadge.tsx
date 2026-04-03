@@ -31,7 +31,7 @@ const PrivacyBadge: React.FC = () => {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 top-full mt-2 w-72 glass rounded-xl shadow-2xl border border-white/10 p-4 z-50 animate-fade-in">
+        <div className="absolute left-0 bottom-full mb-2 w-72 glass rounded-xl shadow-2xl border border-white/10 p-4 z-50 animate-fade-in">
           <div className="flex items-center gap-2 mb-3">
             <div className="p-1 bg-emerald-500/10 rounded-md">
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-400">

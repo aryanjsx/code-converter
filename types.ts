@@ -32,3 +32,10 @@ export interface LLMProviderConfig {
   apiKey: string;
   model: string;
 }
+
+export interface ModelResult {
+  model: string;
+  status: 'pending' | 'processing' | 'success' | 'error';
+  files: ConvertedFile[] | null;
+  error: string | null;
+}

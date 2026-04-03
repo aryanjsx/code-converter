@@ -2,14 +2,13 @@ import React, { createContext, useContext, useState, useCallback, useEffect, Rea
 
 export interface ProviderConfig {
   provider: string;
-  model: string;
+  models: string[];
   apiKey: string;
   baseURL: string;
 }
 
 interface ProviderContextType {
   providerConfig: ProviderConfig;
-  setProviderConfig: (config: ProviderConfig) => void;
   updateProviderConfig: (partial: Partial<ProviderConfig>) => void;
   isConfigValid: boolean;
   rememberKey: boolean;
@@ -22,25 +21,30 @@ const REMEMBER_FLAG = 'codex-convert-remember-key';
 
 const DEFAULT_CONFIG: ProviderConfig = {
   provider: 'openai',
-  model: 'gpt-4o-mini',
+  models: ['gpt-4o-mini'],
   apiKey: '',
   baseURL: 'https://api.openai.com/v1',
 };
 
 function loadConfig(): ProviderConfig {
   try {
-    // One-time migration: remove old localStorage data
-    localStorage.removeItem('codex-convert-provider');
-  } catch { /* noop */ }
-
-  try {
     const raw = sessionStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
       const shouldRemember = sessionStorage.getItem(REMEMBER_FLAG) === 'true';
+
+      let models: string[];
+      if (Array.isArray(parsed.models)) {
+        models = parsed.models.filter((m: unknown) => typeof m === 'string' && m.trim());
+      } else if (typeof parsed.model === 'string' && parsed.model.trim()) {
+        models = [parsed.model];
+      } else {
+        models = [...DEFAULT_CONFIG.models];
+      }
+
       return {
         provider: typeof parsed.provider === 'string' ? parsed.provider : DEFAULT_CONFIG.provider,
-        model: typeof parsed.model === 'string' ? parsed.model : DEFAULT_CONFIG.model,
+        models: models.length > 0 ? models : [...DEFAULT_CONFIG.models],
         baseURL: typeof parsed.baseURL === 'string' ? parsed.baseURL : DEFAULT_CONFIG.baseURL,
         apiKey: shouldRemember && typeof parsed.apiKey === 'string' ? parsed.apiKey : '',
       };
@@ -48,7 +52,7 @@ function loadConfig(): ProviderConfig {
   } catch {
     // Corrupted storage — fall back to defaults
   }
-  return { ...DEFAULT_CONFIG };
+  return { ...DEFAULT_CONFIG, models: [...DEFAULT_CONFIG.models] };
 }
 
 const ProviderContext = createContext<ProviderContextType | undefined>(undefined);
@@ -61,9 +65,9 @@ export const ProviderProvider: React.FC<{ children: ReactNode }> = ({ children }
 
   useEffect(() => {
     try {
-      const toStore: Record<string, string> = {
+      const toStore: Record<string, unknown> = {
         provider: providerConfig.provider,
-        model: providerConfig.model,
+        models: providerConfig.models,
         baseURL: providerConfig.baseURL,
       };
       if (rememberKey) {
@@ -72,10 +76,6 @@ export const ProviderProvider: React.FC<{ children: ReactNode }> = ({ children }
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(toStore));
     } catch { /* sessionStorage unavailable */ }
   }, [providerConfig, rememberKey]);
-
-  const setProviderConfig = useCallback((config: ProviderConfig) => {
-    setProviderConfigRaw(config);
-  }, []);
 
   const updateProviderConfig = useCallback((partial: Partial<ProviderConfig>) => {
     setProviderConfigRaw(prev => ({ ...prev, ...partial }));
@@ -115,12 +115,13 @@ export const ProviderProvider: React.FC<{ children: ReactNode }> = ({ children }
   const isConfigValid = !!(
     providerConfig.apiKey.trim() &&
     providerConfig.baseURL.trim() &&
-    providerConfig.model.trim()
+    providerConfig.models.length > 0 &&
+    providerConfig.models.every(m => m.trim())
   );
 
   return (
     <ProviderContext.Provider value={{
-      providerConfig, setProviderConfig, updateProviderConfig,
+      providerConfig, updateProviderConfig,
       isConfigValid, rememberKey, setRememberKey, clearApiKey,
     }}>
       {children}

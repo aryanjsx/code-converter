@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { PROVIDER_PRESETS } from '../constants';
+import { PROVIDER_PRESETS, PROVIDER_MODELS } from '../constants';
 import { useProvider } from '../context/ProviderContext';
+import ModelSelector from './ModelSelector';
 
 const ProviderPicker: React.FC = () => {
   const { providerConfig, updateProviderConfig, rememberKey, setRememberKey, clearApiKey } = useProvider();
@@ -15,7 +16,7 @@ const ProviderPicker: React.FC = () => {
     updateProviderConfig({
       provider: id,
       baseURL: preset?.baseUrl ?? '',
-      model: preset?.defaultModel ?? '',
+      models: preset?.defaultModel ? [preset.defaultModel] : [],
     });
   };
 
@@ -48,9 +49,10 @@ const ProviderPicker: React.FC = () => {
             </svg>
           </div>
           <span className="text-sm font-semibold text-gray-200">AI Provider</span>
-          {providerConfig.apiKey && currentPreset && (
+          {providerConfig.apiKey && currentPreset && providerConfig.models.length > 0 && (
             <span className="text-xs px-2 py-0.5 bg-emerald-500/10 text-emerald-400 rounded-full border border-emerald-500/20">
-              {currentPreset.name} &middot; {providerConfig.model}
+              {currentPreset.name} &middot; {providerConfig.models[0]}
+              {providerConfig.models.length > 1 && ` +${providerConfig.models.length - 1}`}
             </span>
           )}
         </div>
@@ -87,15 +89,13 @@ const ProviderPicker: React.FC = () => {
             </div>
           </div>
 
-          {/* Model */}
-          <div className="flex flex-col gap-1.5">
-            <label className={labelClass}>Model</label>
-            <input
-              type="text"
-              value={providerConfig.model}
-              onChange={(e) => updateProviderConfig({ model: e.target.value })}
-              placeholder="e.g. gpt-4o-mini"
-              className={inputClass}
+          {/* Models */}
+          <div className="flex flex-col gap-1.5 md:col-span-2">
+            <label className={labelClass}>Models</label>
+            <ModelSelector
+              models={providerConfig.models}
+              onChange={(models) => updateProviderConfig({ models })}
+              suggestedModels={PROVIDER_MODELS[providerConfig.provider] ?? []}
             />
           </div>
 

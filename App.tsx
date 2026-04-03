@@ -1,18 +1,27 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import JSZip from 'jszip';
 import saveAs from 'file-saver';
-import Header from './components/Header';
+import AppLayout from './components/layout/AppLayout';
+import type { AppView } from './components/layout/Sidebar';
+import LeaderboardView from './components/leaderboard/LeaderboardView';
+import ConversionWorkspace from './components/converter/ConversionWorkspace';
+import ScorePanel from './components/benchmark/ScorePanel';
 import LanguageSelector from './components/LanguageSelector';
 import FileTree from './components/FileTree';
 import CodeDisplay from './components/CodeDisplay';
+import ComparisonPanel from './components/ComparisonPanel';
 import Loader from './components/Loader';
 import ToastContainer from './components/ToastContainer';
 import { useToast } from './context/ToastContext';
 import { SUPPORTED_LANGUAGES, PROVIDER_PRESETS } from './constants';
-import { convertCodebase } from './services/llmService';
+import { executeModels } from './core/modelExecutionManager';
+import { runBenchmark } from './core/benchmark/benchmarkEngine';
+import { addBenchmarkRun } from './core/benchmark/benchmarkDataset';
 import { useProvider } from './context/ProviderContext';
 import ProviderPicker from './components/ProviderPicker';
-import type { FileNode, ConvertedFile } from './types';
+import { sanitizePath } from './utils/pathSanitizer';
+import type { FileNode, ConvertedFile, ModelResult } from './types';
+import type { BenchmarkResult } from './core/benchmark/types';
 
 const getOriginalFilePath = (file: File): string => {
   return file.webkitRelativePath || file.name;
@@ -20,6 +29,22 @@ const getOriginalFilePath = (file: File): string => {
 
 const MAX_FILE_COUNT = 500;
 const MAX_TOTAL_SIZE = 50 * 1024 * 1024;
+
+const BINARY_EXTENSIONS = new Set([
+  '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.webp', '.svg',
+  '.woff', '.woff2', '.ttf', '.eot', '.otf',
+  '.zip', '.gz', '.tar', '.rar', '.7z',
+  '.exe', '.dll', '.so', '.dylib', '.bin',
+  '.pdf', '.doc', '.docx', '.xls', '.xlsx',
+  '.mp3', '.mp4', '.wav', '.avi', '.mov',
+  '.pyc', '.class', '.o', '.obj', '.wasm',
+]);
+
+function looksLikeBinary(fileName: string): boolean {
+  const dotIdx = fileName.lastIndexOf('.');
+  if (dotIdx === -1) return false;
+  return BINARY_EXTENSIONS.has(fileName.slice(dotIdx).toLowerCase());
+}
 
 const buildFileTree = (files: (File | ConvertedFile)[]): FileNode => {
   const root: FileNode = { name: 'root', path: '', children: [], isFolder: true };
@@ -50,10 +75,13 @@ const buildFileTree = (files: (File | ConvertedFile)[]): FileNode => {
 
 
 const App: React.FC = () => {
+  const [activeView, setActiveView] = useState<AppView>('converter');
+  const [benchmarkVersion, setBenchmarkVersion] = useState(0);
+
   const [sourceLangId, setSourceLangId] = useState<string>('python');
   const [targetLangId, setTargetLangId] = useState<string>('rust');
   const [originalFiles, setOriginalFiles] = useState<File[]>([]);
-  const [convertedFiles, setConvertedFiles] = useState<ConvertedFile[] | null>(null);
+  const [modelResults, setModelResults] = useState<ModelResult[]>([]);
   const [selectedOriginalPath, setSelectedOriginalPath] = useState<string | null>(null);
   const [selectedConvertedPath, setSelectedConvertedPath] = useState<string | null>(null);
   const [status, setStatus] = useState<'idle' | 'processing' | 'success' | 'error'>('idle');
@@ -61,7 +89,7 @@ const App: React.FC = () => {
 
   const [originalCodeContent, setOriginalCodeContent] = useState<string | null>(null);
   const [isLoadingOriginalCode, setIsLoadingOriginalCode] = useState<boolean>(false);
-  const [convertedFileTree, setConvertedFileTree] = useState<FileNode | null>(null);
+  const [benchmarkResults, setBenchmarkResults] = useState<BenchmarkResult[]>([]);
 
   const { addToast } = useToast();
   const { providerConfig, isConfigValid } = useProvider();
@@ -70,6 +98,30 @@ const App: React.FC = () => {
   const [privacyAcknowledged, setPrivacyAcknowledged] = useState(
     () => { try { return sessionStorage.getItem('codex-convert-privacy-ack') === 'true'; } catch { return false; } }
   );
+
+  const isMultiModel = providerConfig.models.length > 1;
+  const hasAnyResults = modelResults.some(r => r.status === 'success' && r.files);
+
+  const convertedFiles = useMemo<ConvertedFile[] | null>(() => {
+    if (isMultiModel) return null;
+    const result = modelResults.find(r => r.status === 'success');
+    return result?.files ?? null;
+  }, [modelResults, isMultiModel]);
+
+  const convertedFileTree = useMemo<FileNode | null>(() => {
+    if (!convertedFiles) return null;
+    return buildFileTree(convertedFiles);
+  }, [convertedFiles]);
+
+  const resetConversionState = useCallback(() => {
+    setModelResults([]);
+    setBenchmarkResults([]);
+    setSelectedOriginalPath(null);
+    setSelectedConvertedPath(null);
+    setOriginalCodeContent(null);
+    setStatus('idle');
+    setError(null);
+  }, []);
 
   const handleFilesChange = (newFiles: File[]) => {
     if (newFiles.length > MAX_FILE_COUNT) {
@@ -85,13 +137,7 @@ const App: React.FC = () => {
     if (originalFiles.length > 0 && newFiles.length > 0) {
       const handleConfirmReplace = () => {
         setOriginalFiles(newFiles);
-        setConvertedFiles(null);
-        setConvertedFileTree(null);
-        setSelectedOriginalPath(null);
-        setSelectedConvertedPath(null);
-        setOriginalCodeContent(null);
-        setStatus('idle');
-        setError(null);
+        resetConversionState();
         addToast('Project replaced successfully.', 'success');
       };
 
@@ -107,15 +153,17 @@ const App: React.FC = () => {
         }
       );
     } else if (newFiles.length > 0) {
+      const binaryCount = newFiles.filter(f => looksLikeBinary(f.name)).length;
       setOriginalFiles(newFiles);
-      setConvertedFiles(null);
-      setConvertedFileTree(null);
-      setSelectedOriginalPath(null);
-      setSelectedConvertedPath(null);
-      setOriginalCodeContent(null);
-      setStatus('idle');
-      setError(null);
-      addToast(`${newFiles.length} files uploaded. Ready to convert.`, 'info');
+      resetConversionState();
+      if (binaryCount > 0) {
+        addToast(
+          `${newFiles.length} files uploaded (${binaryCount} binary file${binaryCount !== 1 ? 's' : ''} detected — these will be sent as text and may waste tokens).`,
+          'warning',
+        );
+      } else {
+        addToast(`${newFiles.length} files uploaded. Ready to convert.`, 'info');
+      }
     }
   };
 
@@ -141,30 +189,66 @@ const App: React.FC = () => {
   const runConversion = async () => {
     setStatus('processing');
     setError(null);
-    try {
-      const sourceLanguage = SUPPORTED_LANGUAGES.find(l => l.id === sourceLangId)!;
-      const targetLanguage = SUPPORTED_LANGUAGES.find(l => l.id === targetLangId)!;
-      const preset = PROVIDER_PRESETS.find(p => p.id === providerConfig.provider);
-      const result = await convertCodebase(originalFiles, sourceLanguage, targetLanguage, {
-        id: providerConfig.provider,
-        name: preset?.name ?? providerConfig.provider,
+
+    const sourceLanguage = SUPPORTED_LANGUAGES.find(l => l.id === sourceLangId)!;
+    const targetLanguage = SUPPORTED_LANGUAGES.find(l => l.id === targetLangId)!;
+    const preset = PROVIDER_PRESETS.find(p => p.id === providerConfig.provider);
+    const models = providerConfig.models.filter(m => m.trim());
+
+    setModelResults(models.map(model => ({
+      model,
+      status: 'pending' as const,
+      files: null,
+      error: null,
+    })));
+
+    const results = await executeModels(
+      models,
+      {
+        providerId: providerConfig.provider,
+        providerName: preset?.name ?? providerConfig.provider,
         baseUrl: providerConfig.baseURL,
         apiKey: providerConfig.apiKey,
-        model: providerConfig.model,
-      });
-      setConvertedFiles(result);
-      setConvertedFileTree(buildFileTree(result));
+        files: originalFiles,
+        sourceLanguage,
+        targetLanguage,
+      },
+      (model, update) => {
+        setModelResults(prev =>
+          prev.map(r => r.model === model ? update : r)
+        );
+      },
+    );
+
+    const anySuccess = results.some(r => r.status === 'success');
+    if (anySuccess) {
       setStatus('success');
-    } catch (err) {
-      console.error('Conversion failed:', err instanceof Error ? err.message : 'Unknown error');
-      setError(err instanceof Error ? err.message : "An unknown error occurred during conversion.");
+      try {
+        const benchResults = await runBenchmark(results, originalFiles, sourceLanguage, targetLanguage);
+        setBenchmarkResults(benchResults);
+        if (benchResults.length > 0) {
+          addBenchmarkRun({
+            id: crypto.randomUUID(),
+            timestamp: Date.now(),
+            sourceLanguage: sourceLanguage.id,
+            targetLanguage: targetLanguage.id,
+            results: benchResults,
+          });
+          setBenchmarkVersion(v => v + 1);
+        }
+      } catch (err) {
+        console.error('Benchmark failed:', err instanceof Error ? err.message : 'Unknown error');
+      }
+    } else {
       setStatus('error');
+      setError('All model conversions failed. Check individual model panels for details.');
     }
   };
 
   const handleConvert = () => {
+    if (status === 'processing') return;
     if (!isConfigValid) {
-      setError("Please configure your AI provider — API key, model, and base URL are required.");
+      setError("Please configure your AI provider — API key, model(s), and base URL are required.");
       return;
     }
     if (originalFiles.length === 0) {
@@ -186,11 +270,24 @@ const App: React.FC = () => {
   };
 
   const handleDownload = async () => {
-    if (!convertedFiles) return;
+    const successResults = modelResults.filter(r => r.status === 'success' && r.files);
+    if (successResults.length === 0) return;
+
     const zip = new JSZip();
-    convertedFiles.forEach(file => {
-      zip.file(file.path, file.content);
-    });
+
+    if (successResults.length === 1) {
+      successResults[0].files!.forEach(file => {
+        zip.file(sanitizePath(file.path), file.content);
+      });
+    } else {
+      successResults.forEach(result => {
+        const folder = zip.folder(result.model)!;
+        result.files!.forEach(file => {
+          folder.file(sanitizePath(file.path), file.content);
+        });
+      });
+    }
+
     const content = await zip.generateAsync({ type: "blob" });
     saveAs(content, "converted-project.zip");
   };
@@ -251,7 +348,9 @@ const App: React.FC = () => {
 
   const handleSelectOriginalFile = (path: string) => {
     setSelectedOriginalPath(path);
-    setSelectedConvertedPath(findConvertedPartner(path));
+    if (!isMultiModel) {
+      setSelectedConvertedPath(findConvertedPartner(path));
+    }
   }
 
   const handleSelectConvertedFile = (path: string) => {
@@ -299,7 +398,7 @@ const App: React.FC = () => {
 
   const getConvertButtonTooltip = () => {
     if (!isConfigValid) {
-      return 'Configure your AI provider — API key, model, and base URL are required.';
+      return 'Configure your AI provider — API key, model(s), and base URL are required.';
     }
     if (originalFiles.length === 0) {
       return 'Please upload a project folder or files before converting.';
@@ -314,7 +413,7 @@ const App: React.FC = () => {
     const missing: string[] = [];
     if (!providerConfig.apiKey.trim()) missing.push('API key');
     if (!providerConfig.baseURL.trim()) missing.push('base URL');
-    if (!providerConfig.model.trim()) missing.push('model');
+    if (providerConfig.models.filter(m => m.trim()).length === 0) missing.push('model');
     if (missing.length === 0) return null;
     return `Enter ${missing.join(', ')} in the AI Provider section to enable conversion.`;
   };
@@ -344,12 +443,7 @@ const App: React.FC = () => {
   );
 
   return (
-    <div className="h-screen flex flex-col bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-gray-900 via-gray-950 to-black text-gray-200 overflow-hidden">
-      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-indigo-500/10 blur-[100px]"></div>
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-violet-500/10 blur-[100px]"></div>
-      </div>
-
+    <>
       <ToastContainer />
       <input
         id="folder-upload"
@@ -370,7 +464,8 @@ const App: React.FC = () => {
         className="hidden"
         aria-hidden="true"
       />
-      {status === 'processing' && <Loader message="Converting codebase..." />}
+
+      {status === 'processing' && !isMultiModel && <Loader message="Converting codebase..." />}
 
       {showPrivacyNotice && (
         <div className="fixed inset-0 bg-gray-950/80 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
@@ -387,6 +482,13 @@ const App: React.FC = () => {
                 <strong className="text-white">{PROVIDER_PRESETS.find(p => p.id === providerConfig.provider)?.name ?? providerConfig.provider}</strong>{' '}
                 at <code className="text-xs bg-gray-800 px-1.5 py-0.5 rounded">{providerConfig.baseURL}</code>.
               </p>
+              {isMultiModel && (
+                <p>
+                  You are converting with <strong className="text-white">{providerConfig.models.length} models</strong>:{' '}
+                  <span className="text-indigo-300">{providerConfig.models.join(', ')}</span>.
+                  Each model will receive a copy of your code.
+                </p>
+              )}
               <p>This application does <strong className="text-white">not</strong> store your code or API keys on any server. All processing happens directly between your browser and the AI provider.</p>
             </div>
             <div className="flex justify-end gap-3">
@@ -401,118 +503,139 @@ const App: React.FC = () => {
         </div>
       )}
 
-      <div className="z-10 flex flex-col h-full">
-        <Header />
-
-        <main className="flex-1 flex flex-col p-6 gap-6 overflow-hidden max-w-[1920px] mx-auto w-full">
-          <div className="glass p-5 rounded-2xl flex flex-col md:flex-row items-center gap-6 shadow-xl animate-fade-in">
-            <LanguageSelector id="source-lang" value={sourceLangId} onChange={setSourceLangId} title="Source Language" />
-
-            <div className="text-gray-500 p-2 hidden md:block bg-gray-800/50 rounded-full">
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
-            </div>
-
-            <LanguageSelector id="target-lang" value={targetLangId} onChange={setTargetLangId} title="Target Language" />
-
-            <div className="flex-1 flex items-center justify-end gap-3 flex-wrap">
-              {originalFiles.length > 0 && (
-                <>
-                  <label
-                    htmlFor="folder-upload"
-                    title="Upload a different project folder"
-                    className="cursor-pointer px-4 py-2.5 bg-gray-800/50 text-gray-300 font-medium rounded-lg hover:bg-gray-700 hover:text-white transition-colors flex items-center gap-2 border border-gray-700/50"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-                    <span className="hidden xl:inline">Upload Folder</span>
-                  </label>
-                  <label
-                    htmlFor="files-upload"
-                    title="Upload different files"
-                    className="cursor-pointer px-4 py-2.5 bg-gray-800/50 text-gray-300 font-medium rounded-lg hover:bg-gray-700 hover:text-white transition-colors flex items-center gap-2 border border-gray-700/50"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
-                    <span className="hidden xl:inline">Upload Files</span>
-                  </label>
-                </>
-              )}
-              {status === 'success' && (
-                <button
-                  onClick={handleDownload}
-                  disabled={!convertedFiles}
-                  className="px-6 py-2.5 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-500 hover:shadow-lg hover:shadow-emerald-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                  Download ZIP
-                </button>
-              )}
-              <button
-                onClick={handleConvert}
-                disabled={isConvertButtonDisabled}
-                title={getConvertButtonTooltip()}
-                className="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-semibold rounded-lg hover:shadow-lg hover:shadow-indigo-500/30 hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:transform-none disabled:hover:shadow-none"
-              >
-                {status === 'processing' ? 'Converting...' : 'Convert Code'}
-              </button>
-            </div>
-          </div>
-
-          <ProviderPicker />
-
-          {getMissingConfigMessage() && (
-            <div className="bg-amber-500/10 border border-amber-500/20 text-amber-200 px-4 py-3 rounded-xl flex items-center gap-3 animate-fade-in">
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-              <span>{getMissingConfigMessage()}</span>
-            </div>
-          )}
-
-          {error && (
-            <div className="bg-red-500/10 border border-red-500/20 text-red-200 px-4 py-3 rounded-xl flex items-center gap-3 animate-fade-in">
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-              <span>{error}</span>
-            </div>
-          )}
-
-          <div className="flex-1 grid grid-cols-12 gap-6 overflow-hidden animate-slide-up">
-            {originalFiles.length > 0 ? (
+      <AppLayout
+        activeView={activeView}
+        onNavigate={setActiveView}
+        topBarTitle={activeView === 'leaderboard' ? 'Benchmark Leaderboard' : 'Code Converter'}
+        topBarSubtitle={
+          activeView === 'converter' && originalFiles.length > 0
+            ? `${originalFiles.length} file${originalFiles.length !== 1 ? 's' : ''} loaded`
+            : undefined
+        }
+        topBarActions={activeView === 'converter' ? (
+          <>
+            {originalFiles.length > 0 && (
               <>
-                <div className="col-span-12 md:col-span-3 lg:col-span-2 flex flex-col gap-4 overflow-hidden h-full">
-                  <div className="flex-1 overflow-hidden rounded-2xl glass-panel">
-                    <FileTree
-                      fileTree={originalFileTree}
-                      selectedFile={selectedOriginalPath}
-                      onSelectFile={handleSelectOriginalFile}
-                      title="Original Project"
-                    />
-                  </div>
-                  {convertedFileTree && (
-                    <div className="flex-1 overflow-hidden rounded-2xl glass-panel">
-                      <FileTree
-                        fileTree={convertedFileTree}
-                        selectedFile={selectedConvertedPath}
-                        onSelectFile={handleSelectConvertedFile}
-                        title="Converted Project"
-                      />
-                    </div>
-                  )}
-                </div>
-                <div className="col-span-12 md:col-span-9 lg:col-span-10 flex flex-col overflow-hidden h-full rounded-2xl glass-panel shadow-2xl">
-                  <CodeDisplay
-                    originalCode={isLoadingOriginalCode ? 'Loading...' : originalCodeContent}
-                    convertedCode={convertedCode}
-                    sourceLanguage={SUPPORTED_LANGUAGES.find(l => l.id === sourceLangId)?.name ?? ''}
-                    targetLanguage={SUPPORTED_LANGUAGES.find(l => l.id === targetLangId)?.name ?? ''}
-                  />
-                </div>
+                <label htmlFor="folder-upload" title="Upload a different project folder" className="cursor-pointer p-2 text-gray-400 hover:text-white rounded-lg hover:bg-white/5 transition-colors hidden sm:block">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
+                </label>
+                <label htmlFor="files-upload" title="Upload different files" className="cursor-pointer p-2 text-gray-400 hover:text-white rounded-lg hover:bg-white/5 transition-colors hidden sm:block">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" /><polyline points="14 2 14 8 20 8" /><line x1="12" y1="18" x2="12" y2="12" /><line x1="9" y1="15" x2="15" y2="15" /></svg>
+                </label>
               </>
-            ) : (
-              <div className="col-span-12 h-full">
-                <UploadArea />
-              </div>
             )}
+            {status === 'success' && hasAnyResults && (
+              <button
+                onClick={handleDownload}
+                className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-semibold rounded-lg hover:bg-emerald-500 transition-all flex items-center gap-1.5"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+                ZIP
+              </button>
+            )}
+            <button
+              onClick={handleConvert}
+              disabled={isConvertButtonDisabled}
+              title={getConvertButtonTooltip()}
+              className="px-4 py-1.5 bg-gradient-to-r from-indigo-600 to-violet-600 text-white text-xs font-semibold rounded-lg hover:shadow-lg hover:shadow-indigo-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {status === 'processing' ? 'Converting...' : isMultiModel ? `Compare ${providerConfig.models.length} Models` : 'Convert'}
+            </button>
+          </>
+        ) : undefined}
+      >
+        {activeView === 'leaderboard' ? (
+          <div className="h-full overflow-auto p-6">
+            <LeaderboardView refreshKey={benchmarkVersion} />
           </div>
-        </main>
-      </div>
-    </div>
+        ) : (
+          <div className="flex flex-col h-full overflow-hidden">
+            <div className="shrink-0 p-4 space-y-3">
+              <ProviderPicker />
+
+              {getMissingConfigMessage() && (
+                <div className="bg-amber-500/10 border border-amber-500/20 text-amber-200 px-4 py-2.5 rounded-xl flex items-center gap-3 text-sm animate-fade-in">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>
+                  <span>{getMissingConfigMessage()}</span>
+                </div>
+              )}
+
+              {error && (
+                <div className="bg-red-500/10 border border-red-500/20 text-red-200 px-4 py-2.5 rounded-xl flex items-center gap-3 text-sm animate-fade-in">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
+                  <span>{error}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex-1 min-h-0">
+              {originalFiles.length > 0 ? (
+                <ConversionWorkspace
+                  leftPanel={
+                    <>
+                      <div className="p-4 border-b border-white/5 space-y-3 shrink-0">
+                        <LanguageSelector id="source-lang" value={sourceLangId} onChange={setSourceLangId} title="Source Language" />
+                        <div className="flex justify-center">
+                          <div className="p-1 bg-gray-800/50 rounded-full text-gray-500">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><polyline points="19 12 12 19 5 12" /></svg>
+                          </div>
+                        </div>
+                        <LanguageSelector id="target-lang" value={targetLangId} onChange={setTargetLangId} title="Target Language" />
+                      </div>
+                      <div className="flex-1 min-h-0 overflow-hidden">
+                        <FileTree
+                          fileTree={originalFileTree}
+                          selectedFile={selectedOriginalPath}
+                          onSelectFile={handleSelectOriginalFile}
+                          title="Original Project"
+                        />
+                      </div>
+                      {!isMultiModel && convertedFileTree && (
+                        <div className="flex-1 min-h-0 overflow-hidden border-t border-white/5">
+                          <FileTree
+                            fileTree={convertedFileTree}
+                            selectedFile={selectedConvertedPath}
+                            onSelectFile={handleSelectConvertedFile}
+                            title="Converted Project"
+                          />
+                        </div>
+                      )}
+                    </>
+                  }
+                  centerPanel={
+                    <div className="h-full rounded-xl overflow-hidden glass-panel shadow-2xl m-4 ml-0 lg:ml-0 lg:m-0">
+                      {isMultiModel ? (
+                        <ComparisonPanel
+                          modelResults={modelResults}
+                          selectedOriginalPath={selectedOriginalPath}
+                          sourceLangId={sourceLangId}
+                          targetLangId={targetLangId}
+                          benchmarkResults={benchmarkResults}
+                        />
+                      ) : (
+                        <CodeDisplay
+                          originalCode={isLoadingOriginalCode ? 'Loading...' : originalCodeContent}
+                          convertedCode={convertedCode}
+                          sourceLanguage={SUPPORTED_LANGUAGES.find(l => l.id === sourceLangId)?.name ?? ''}
+                          targetLanguage={SUPPORTED_LANGUAGES.find(l => l.id === targetLangId)?.name ?? ''}
+                        />
+                      )}
+                    </div>
+                  }
+                  rightPanel={
+                    benchmarkResults.length > 0 ? <ScorePanel results={benchmarkResults} /> : undefined
+                  }
+                />
+              ) : (
+                <div className="h-full p-4">
+                  <UploadArea />
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </AppLayout>
+    </>
   );
 };
 

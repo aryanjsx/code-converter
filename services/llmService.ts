@@ -1,4 +1,5 @@
 import type { Language, ConvertedFile, LLMProviderConfig } from '../types';
+import { sanitizePath } from '../utils/pathSanitizer';
 
 const formatFileContent = async (files: File[]): Promise<string> => {
   const fileContents = await Promise.all(
@@ -56,6 +57,12 @@ You MUST return a single, valid JSON object. Do not include any text or markdown
 
 /**
  * Validate the provider base URL to prevent SSRF and enforce HTTPS for remote endpoints.
+ *
+ * NOTE: DNS rebinding attacks (where a hostname resolves to a public IP during
+ * validation but to a private IP at fetch time) cannot be fully prevented in a
+ * client-side application. Since this app runs entirely in the user's browser,
+ * the impact is limited to the user's own local network. Server-side resolution
+ * checks are not possible without a backend.
  */
 function validateBaseUrl(baseUrl: string, providerId: string): void {
   let parsed: URL;
@@ -187,5 +194,8 @@ export const convertCodebase = async (
     throw new Error('Invalid response structure: expected { files: [...] }');
   }
 
-  return result.files;
+  return result.files.map(file => ({
+    ...file,
+    path: sanitizePath(file.path),
+  }));
 };

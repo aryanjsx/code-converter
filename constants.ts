@@ -1,6 +1,18 @@
 
 import type { Language, ProviderPreset } from './types';
 
+export const PROVIDER_MODELS: Record<string, string[]> = {
+  openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'o3-mini'],
+  deepseek: ['deepseek-chat', 'deepseek-coder', 'deepseek-reasoner'],
+  mistral: ['mistral-large-latest', 'mistral-small-latest', 'codestral-latest'],
+  groq: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'],
+  ollama: ['llama3', 'codellama', 'mistral', 'deepseek-coder'],
+  gemini: ['gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-1.5-pro'],
+  openrouter: ['anthropic/claude-sonnet-4', 'google/gemini-2.5-pro', 'openai/gpt-4o'],
+  together: ['meta-llama/Llama-3-70b-chat-hf', 'meta-llama/Llama-3-8b-chat-hf'],
+  custom: [],
+};
+
 export const PROVIDER_PRESETS: ProviderPreset[] = [
   { id: 'openai', name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', defaultModel: 'gpt-4o-mini' },
   { id: 'deepseek', name: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', defaultModel: 'deepseek-chat' },

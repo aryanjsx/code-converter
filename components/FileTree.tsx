@@ -1,5 +1,6 @@
 
 import React, { useState } from 'react';
+import { truncatePath } from '../utils/pathSanitizer';
 import type { FileNode } from '../types';
 
 const FolderIcon: React.FC<{ isOpen: boolean }> = ({ isOpen }) => (
@@ -33,7 +34,7 @@ const FileTreeNode: React.FC<FileTreeProps> = ({ node, selectedFile, onSelectFil
           onClick={() => setIsOpen(!isOpen)}
         >
           <FolderIcon isOpen={isOpen} />
-          <span className="font-medium text-gray-300 text-sm truncate">{node.name}</span>
+          <span className="font-medium text-gray-300 text-sm truncate" title={node.name}>{truncatePath(node.name)}</span>
         </div>
         {isOpen && (
           <div className="border-l border-white/5 ml-3">
@@ -53,7 +54,7 @@ const FileTreeNode: React.FC<FileTreeProps> = ({ node, selectedFile, onSelectFil
       onClick={() => onSelectFile(node.path)}
     >
       <FileIcon />
-      <span className="text-sm truncate">{node.name}</span>
+      <span className="text-sm truncate" title={node.name}>{truncatePath(node.name)}</span>
     </div>
   );
 };
