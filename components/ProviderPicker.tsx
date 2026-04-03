@@ -3,7 +3,7 @@ import { PROVIDER_PRESETS } from '../constants';
 import { useProvider } from '../context/ProviderContext';
 
 const ProviderPicker: React.FC = () => {
-  const { providerConfig, updateProviderConfig } = useProvider();
+  const { providerConfig, updateProviderConfig, rememberKey, setRememberKey, clearApiKey } = useProvider();
   const [showKey, setShowKey] = useState(false);
   const [isOpen, setIsOpen] = useState(() => !providerConfig.apiKey);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -126,6 +126,26 @@ const ProviderPicker: React.FC = () => {
                 )}
               </button>
             </div>
+            <div className="flex items-center justify-between mt-1">
+              <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none hover:text-gray-300 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={rememberKey}
+                  onChange={(e) => setRememberKey(e.target.checked)}
+                  className="rounded border-gray-600 bg-gray-800 text-indigo-500 focus:ring-indigo-500/50 w-3 h-3 accent-indigo-500"
+                />
+                Remember for this session
+              </label>
+              {providerConfig.apiKey && (
+                <button
+                  type="button"
+                  onClick={clearApiKey}
+                  className="text-xs text-red-400/70 hover:text-red-300 transition-colors"
+                >
+                  Clear key
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Base URL — shown inline when Custom is selected */}
@@ -140,6 +160,14 @@ const ProviderPicker: React.FC = () => {
                 className={inputClass}
                 spellCheck={false}
               />
+            </div>
+          )}
+
+          {/* Custom provider warning */}
+          {isCustom && (
+            <div className="col-span-1 md:col-span-2 bg-amber-500/10 border border-amber-500/20 text-amber-200 px-3 py-2.5 rounded-lg flex items-start gap-2.5 text-xs leading-relaxed">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 mt-0.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>
+              <span>You are sending your code to a custom AI endpoint. Ensure you trust this provider before converting.</span>
             </div>
           )}
 

@@ -1,12 +1,13 @@
 <div align="center">
 
-<img src="assets/banner.png" alt="AI Code Converter Banner" width="800" />
 
 # Multi-Language Code Converter
 
 **Convert entire codebases between 23+ programming languages using Google Gemini.**
 
 Upload a project, pick your source and target languages, review the results side-by-side, and download a ready-to-run ZIP.
+
+<img src="assets/banner.png" alt="AI Code Converter Banner" width="800" />
 
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)](https://react.dev)
 [![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)](https://vite.dev)

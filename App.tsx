@@ -18,6 +18,9 @@ const getOriginalFilePath = (file: File): string => {
   return file.webkitRelativePath || file.name;
 };
 
+const MAX_FILE_COUNT = 500;
+const MAX_TOTAL_SIZE = 50 * 1024 * 1024;
+
 const buildFileTree = (files: (File | ConvertedFile)[]): FileNode => {
   const root: FileNode = { name: 'root', path: '', children: [], isFolder: true };
 
@@ -63,7 +66,22 @@ const App: React.FC = () => {
   const { addToast } = useToast();
   const { providerConfig, isConfigValid } = useProvider();
 
+  const [showPrivacyNotice, setShowPrivacyNotice] = useState(false);
+  const [privacyAcknowledged, setPrivacyAcknowledged] = useState(
+    () => { try { return sessionStorage.getItem('codex-convert-privacy-ack') === 'true'; } catch { return false; } }
+  );
+
   const handleFilesChange = (newFiles: File[]) => {
+    if (newFiles.length > MAX_FILE_COUNT) {
+      addToast(`Upload limit exceeded: ${newFiles.length} files (max ${MAX_FILE_COUNT}).`, 'error');
+      return;
+    }
+    const totalSize = newFiles.reduce((sum, f) => sum + f.size, 0);
+    if (totalSize > MAX_TOTAL_SIZE) {
+      addToast(`Upload limit exceeded: ${(totalSize / 1024 / 1024).toFixed(1)}MB (max 50MB).`, 'error');
+      return;
+    }
+
     if (originalFiles.length > 0 && newFiles.length > 0) {
       const handleConfirmReplace = () => {
         setOriginalFiles(newFiles);
@@ -120,15 +138,7 @@ const App: React.FC = () => {
   };
 
 
-  const handleConvert = async () => {
-    if (!isConfigValid) {
-      setError("Please configure your AI provider — API key, model, and base URL are required.");
-      return;
-    }
-    if (originalFiles.length === 0) {
-      addToast("Please upload a project folder or files first.", 'error');
-      return;
-    }
+  const runConversion = async () => {
     setStatus('processing');
     setError(null);
     try {
@@ -146,10 +156,33 @@ const App: React.FC = () => {
       setConvertedFileTree(buildFileTree(result));
       setStatus('success');
     } catch (err) {
-      console.error(err);
+      console.error('Conversion failed:', err instanceof Error ? err.message : 'Unknown error');
       setError(err instanceof Error ? err.message : "An unknown error occurred during conversion.");
       setStatus('error');
     }
+  };
+
+  const handleConvert = () => {
+    if (!isConfigValid) {
+      setError("Please configure your AI provider — API key, model, and base URL are required.");
+      return;
+    }
+    if (originalFiles.length === 0) {
+      addToast("Please upload a project folder or files first.", 'error');
+      return;
+    }
+    if (!privacyAcknowledged) {
+      setShowPrivacyNotice(true);
+      return;
+    }
+    runConversion();
+  };
+
+  const handlePrivacyAccepted = () => {
+    setPrivacyAcknowledged(true);
+    try { sessionStorage.setItem('codex-convert-privacy-ack', 'true'); } catch { /* noop */ }
+    setShowPrivacyNotice(false);
+    runConversion();
   };
 
   const handleDownload = async () => {
@@ -338,6 +371,35 @@ const App: React.FC = () => {
         aria-hidden="true"
       />
       {status === 'processing' && <Loader message="Converting codebase..." />}
+
+      {showPrivacyNotice && (
+        <div className="fixed inset-0 bg-gray-950/80 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
+          <div className="glass max-w-lg mx-4 p-6 rounded-2xl shadow-2xl border border-white/10">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-indigo-500/10 rounded-lg">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-indigo-400"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+              </div>
+              <h3 className="text-lg font-semibold text-white">Privacy Notice</h3>
+            </div>
+            <div className="space-y-3 text-sm text-gray-300 leading-relaxed mb-6">
+              <p>
+                Your code will be sent directly to{' '}
+                <strong className="text-white">{PROVIDER_PRESETS.find(p => p.id === providerConfig.provider)?.name ?? providerConfig.provider}</strong>{' '}
+                at <code className="text-xs bg-gray-800 px-1.5 py-0.5 rounded">{providerConfig.baseURL}</code>.
+              </p>
+              <p>This application does <strong className="text-white">not</strong> store your code or API keys on any server. All processing happens directly between your browser and the AI provider.</p>
+            </div>
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setShowPrivacyNotice(false)} className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors rounded-lg">
+                Cancel
+              </button>
+              <button onClick={handlePrivacyAccepted} className="px-5 py-2 bg-gradient-to-r from-indigo-600 to-violet-600 text-white text-sm font-semibold rounded-lg hover:shadow-lg hover:shadow-indigo-500/30 transition-all">
+                I Understand, Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="z-10 flex flex-col h-full">
         <Header />

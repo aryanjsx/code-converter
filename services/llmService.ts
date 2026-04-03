@@ -55,6 +55,52 @@ You MUST return a single, valid JSON object. Do not include any text or markdown
 }`;
 
 /**
+ * Validate the provider base URL to prevent SSRF and enforce HTTPS for remote endpoints.
+ */
+function validateBaseUrl(baseUrl: string, providerId: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(baseUrl);
+  } catch {
+    throw new Error('Invalid base URL format.');
+  }
+
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    throw new Error('Only HTTP and HTTPS protocols are allowed for the base URL.');
+  }
+
+  const hostname = parsed.hostname.replace(/^\[|\]$/g, '');
+  const isLocalhost = ['localhost', '127.0.0.1', '0.0.0.0', '::1'].includes(hostname);
+
+  const isPrivateNetwork =
+    isLocalhost ||
+    hostname.startsWith('10.') ||
+    hostname.startsWith('192.168.') ||
+    hostname.startsWith('169.254.') ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(hostname);
+
+  if (isPrivateNetwork && providerId !== 'ollama') {
+    throw new Error(
+      'Private/local network URLs are only allowed for the Ollama provider. ' +
+      'Select Ollama or use a public HTTPS endpoint.'
+    );
+  }
+
+  if (!isLocalhost && parsed.protocol === 'http:') {
+    throw new Error('Remote AI providers must use HTTPS.');
+  }
+}
+
+function sanitizeErrorMessage(raw: string): string {
+  let msg = raw.slice(0, 200);
+  msg = msg.replace(/\b(sk|key|token|bearer|api[_-]?key)[_-]?[a-zA-Z0-9]{20,}\b/gi, '[REDACTED]');
+  if (msg.length < raw.length) {
+    msg += '...';
+  }
+  return msg;
+}
+
+/**
  * Strip markdown code fences that some models wrap around JSON output.
  */
 function extractJSON(text: string): string {
@@ -86,6 +132,8 @@ export const convertCodebase = async (
     throw new Error('Base URL is not configured for the selected LLM provider.');
   }
 
+  validateBaseUrl(provider.baseUrl, provider.id);
+
   const formattedFileContent = await formatFileContent(files);
   const prompt = generatePrompt(sourceLanguage, targetLanguage, formattedFileContent);
 
@@ -116,7 +164,7 @@ export const convertCodebase = async (
     } catch {
       errorMessage = await response.text();
     }
-    throw new Error(`LLM API error (${response.status}): ${errorMessage}`);
+    throw new Error(`LLM API error (${response.status}): ${sanitizeErrorMessage(errorMessage)}`);
   }
 
   const data = await response.json();

@@ -10,13 +10,6 @@ export default defineConfig(({ mode }) => {
         host: '0.0.0.0',
       },
       plugins: [react()],
-      define: {
-        'process.env.API_KEY': JSON.stringify(env.LLM_API_KEY || env.GEMINI_API_KEY || ''),
-        'process.env.LLM_API_KEY': JSON.stringify(env.LLM_API_KEY || env.GEMINI_API_KEY || ''),
-        'process.env.LLM_PROVIDER': JSON.stringify(env.LLM_PROVIDER || ''),
-        'process.env.LLM_BASE_URL': JSON.stringify(env.LLM_BASE_URL || ''),
-        'process.env.LLM_MODEL': JSON.stringify(env.LLM_MODEL || ''),
-      },
       resolve: {
         alias: {
           '@': path.resolve(__dirname, '.'),

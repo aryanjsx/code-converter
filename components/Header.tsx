@@ -1,5 +1,6 @@
 
 import React from 'react';
+import PrivacyBadge from './PrivacyBadge';
 
 const Header: React.FC = () => {
   return (
@@ -14,7 +15,7 @@ const Header: React.FC = () => {
         </div>
       </div>
       <div className="flex items-center gap-4">
-        {/* <a href="#" className="text-sm font-medium text-gray-400 hover:text-white transition-colors">Documentation</a> */}
+        <PrivacyBadge />
         <a href="https://github.com/aryanjsx/code-converter" className="text-sm font-medium text-gray-400 hover:text-white transition-colors">GitHub</a>
       </div>
     </header>
