@@ -11,7 +11,7 @@ Convert entire codebases across languages using multiple AI models and benchmark
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8_Strict-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Security](https://img.shields.io/badge/Security-Audited-34D058?logo=shield&logoColor=white)](#-security--privacy)
 
-<img src="../code-converter/unname.png" div align='center'></img>
+<img src="assets/banner.png" alt="CodexConvert Banner" width="100%" />
 
 </div>
 
@@ -287,4 +287,4 @@ Contributions are welcome! Whether it's a new benchmark metric, a provider prese
 
 ## 📄 License
 
-This project is provided as-is. Add a license file (e.g. MIT) if you plan to distribute it publicly.
+This project is licensed under the [MIT License](LICENSE).
